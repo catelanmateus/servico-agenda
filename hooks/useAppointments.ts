@@ -37,12 +37,19 @@ export function useAppointments() {
   const [error, setError] = useState<string | null>(null)
 
   // Buscar horários disponíveis
-  const getAvailableTimes = useCallback(async (date: string, barberId: string = '1'): Promise<TimeSlot[]> => {
+  const getAvailableTimes = useCallback(async (date: string, barberId: string = '1', serviceId?: string, totalDuration?: number): Promise<TimeSlot[]> => {
     setLoading(true)
     setError(null)
     
     try {
-      const response = await fetch(`/api/appointments?date=${date}&barberId=${barberId}`)
+      let url = `/api/appointments?date=${date}&barberId=${barberId}`
+      if (serviceId) {
+        url += `&serviceId=${serviceId}`
+      }
+      if (totalDuration) {
+        url += `&totalDuration=${totalDuration}`
+      }
+      const response = await fetch(url)
       
       if (!response.ok) {
         throw new Error('Erro ao buscar horários disponíveis')

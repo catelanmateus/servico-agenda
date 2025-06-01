@@ -22,7 +22,7 @@ interface TimeSlot {
 }
 
 interface BookingData {
-  service?: Service
+  services?: Service[]
   date?: Date
   time?: string
   name?: string
@@ -30,9 +30,13 @@ interface BookingData {
 }
 
 const services: Service[] = [
+  { id: 'barba', name: 'Barba', price: 15, duration: 15, icon: '' },
   { id: 'corte', name: 'Corte', price: 25, duration: 30, icon: '' },
-  { id: 'barba', name: 'Barba', price: 15, duration: 20, icon: '' },
-  { id: 'combo', name: 'Corte + Barba', price: 35, duration: 45, icon: '' },
+  { id: 'depilacao-nariz', name: 'Depilação Nariz na Cera', price: 10, duration: 15, icon: '' },
+  { id: 'hidratacao', name: 'Hidratação', price: 20, duration: 30, icon: '' },
+  { id: 'limpeza-pele', name: 'Limpeza de Pele', price: 25, duration: 30, icon: '' },
+  { id: 'relaxamento-capilar', name: 'Relaxamento Capilar', price: 30, duration: 30, icon: '' },
+  { id: 'sobrancelha', name: 'Sobrancelha', price: 10, duration: 15, icon: '' },
 ]
 
 // Função removida - agora usamos a API
@@ -48,12 +52,16 @@ const getNextDays = (count: number = 7): Date[] => {
 export default function HomePage() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
-  const [booking, setBooking] = useState<BookingData>({})
+  const [booking, setBooking] = useState<BookingData>({ services: [] })
   const [availableDays] = useState(getNextDays())
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [tempReservationToken, setTempReservationToken] = useState<string | null>(null)
+  
+  // Debug log
+  console.log('Current booking state:', booking)
+  console.log('Current step:', step)
   
   const {
     loading: apiLoading,
@@ -68,21 +76,45 @@ export default function HomePage() {
     if (booking.date) {
       loadAvailableTimes()
     }
-  }, [booking.date])
+  }, [booking.date, booking.services])
 
   const loadAvailableTimes = async () => {
-    if (!booking.date) return
+    if (!booking.date || !booking.services?.length) return
     
     try {
       setIsLoading(true)
       const dateStr = format(booking.date, 'yyyy-MM-dd')
-      const times = await getAvailableTimes(dateStr)
+      // Calcular duração total dos serviços selecionados
+      const totalDuration = booking.services.reduce((total, service) => total + service.duration, 0)
+      const times = await getAvailableTimes(dateStr, '1', undefined, totalDuration)
       setTimeSlots(times)
     } catch (error) {
       console.error('Erro ao carregar horários:', error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const formatPhoneNumber = (value: string) => {
+    // Remove tudo que não é número
+    const numbers = value.replace(/\D/g, '')
+    
+    // Limita a 11 dígitos
+    const limitedNumbers = numbers.slice(0, 11)
+    
+    // Aplica máscara progressiva
+    if (limitedNumbers.length <= 2) {
+      return limitedNumbers
+    } else if (limitedNumbers.length <= 7) {
+      return limitedNumbers.replace(/(\d{2})(\d+)/, '($1) $2')
+    } else {
+      return limitedNumbers.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3')
+    }
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value)
+    setBooking(prev => ({ ...prev, phone: formatted }))
   }
 
   useEffect(() => {
@@ -106,12 +138,17 @@ export default function HomePage() {
           parsed.phone = phoneFromUrl
         }
         
+        // Garantir que services seja sempre um array
+        if (!parsed.services) {
+          parsed.services = parsed.service ? [parsed.service] : []
+        }
+        
         setBooking(parsed)
         
         // Determine current step based on saved data
         if (parsed.name && parsed.phone) setStep(4)
         else if (parsed.date && parsed.time) setStep(3)
-        else if (parsed.service) setStep(2)
+        else if (parsed.services?.length > 0) setStep(2)
       } catch (e) {
         console.log('Error loading saved progress')
       }
@@ -119,8 +156,47 @@ export default function HomePage() {
   }, [])
 
   const handleServiceSelect = (service: Service) => {
-    setBooking(prev => ({ ...prev, service }))
-    setTimeout(() => setStep(2), 300)
+    console.log('Service selected:', service)
+    setBooking(prev => {
+      const currentServices = prev.services || []
+      const isSelected = currentServices.some(s => s.id === service.id)
+      
+      console.log('Current services:', currentServices)
+      console.log('Is selected:', isSelected)
+      
+      if (isSelected) {
+        // Remove serviço se já estiver selecionado
+        const newServices = currentServices.filter(s => s.id !== service.id)
+        console.log('Removing service, new services:', newServices)
+        return {
+          ...prev,
+          services: newServices
+        }
+      } else {
+        // Adiciona serviço se não estiver selecionado
+        const newServices = [...currentServices, service]
+        console.log('Adding service, new services:', newServices)
+        return {
+          ...prev,
+          services: newServices
+        }
+      }
+    })
+  }
+  
+  const handleContinueToDate = () => {
+    if (booking.services && booking.services.length > 0) {
+      setTimeout(() => setStep(2), 300)
+    }
+  }
+  
+  // Calcular preço e duração total
+  const getTotalPrice = () => {
+    return booking.services?.reduce((total, service) => total + service.price, 0) || 0
+  }
+  
+  const getTotalDuration = () => {
+    return booking.services?.reduce((total, service) => total + service.duration, 0) || 0
   }
 
   const handleDateSelect = (date: Date) => {
@@ -152,7 +228,7 @@ export default function HomePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!booking.service || !booking.date || !booking.time || !booking.name || !booking.phone) {
+    if (!booking.services?.length || !booking.date || !booking.time || !booking.name || !booking.phone) {
       alert('Por favor, preencha todos os campos')
       return
     }
@@ -161,11 +237,13 @@ export default function HomePage() {
     
     try {
       const appointmentData = {
-        service: booking.service.name,
+        service: booking.services.map(s => s.name).join(', '),
         date: format(booking.date, 'yyyy-MM-dd'),
         time: booking.time,
         name: booking.name,
-        phone: booking.phone
+        phone: booking.phone,
+        totalDuration: getTotalDuration(),
+        totalPrice: getTotalPrice()
       }
       
       await createAppointment(appointmentData)
@@ -240,8 +318,14 @@ export default function HomePage() {
           </p>
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Serviço:</span>
-              <span className="font-medium">{booking.service?.icon} {booking.service?.name}</span>
+              <span className="text-gray-600">Serviços:</span>
+              <div className="text-right">
+                {booking.services?.map((service, index) => (
+                  <div key={service.id} className="font-medium">
+                    {service.icon} {service.name}
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-600">Data:</span>
@@ -253,9 +337,13 @@ export default function HomePage() {
               <span className="text-gray-600">Horário:</span>
               <span className="font-medium">{booking.time}</span>
             </div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-600">Duração Total:</span>
+              <span className="font-medium">{getTotalDuration()} minutos</span>
+            </div>
             <div className="flex items-center justify-between">
-              <span className="text-gray-600">Valor:</span>
-              <span className="font-medium text-primary-600">R$ {booking.service?.price}</span>
+              <span className="text-gray-600">Valor Total:</span>
+              <span className="font-medium text-primary-600">R$ {getTotalPrice()}</span>
             </div>
           </div>
           <button
@@ -298,38 +386,97 @@ export default function HomePage() {
             >
               <div className="text-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Que serviço você quer?
+                  Que serviços você quer?
                 </h2>
-                <p className="text-gray-600">Escolha o serviço desejado</p>
+                <p className="text-gray-600">Escolha um ou mais serviços</p>
+                {booking.services && booking.services.length > 0 && (
+                  <div className="mt-4 p-3 bg-primary-50 rounded-lg">
+                    <p className="text-sm text-primary-700">
+                      {booking.services.length} serviço{booking.services.length > 1 ? 's' : ''} selecionado{booking.services.length > 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm font-medium text-primary-800">
+                      Total: {getTotalDuration()} min • R$ {getTotalPrice()}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">
-                {services.map((service) => (
+                {services.map((service) => {
+                  const isSelected = booking.services?.some(s => s.id === service.id) || false
+                  return (
+                    <motion.div
+                      key={service.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleServiceSelect(service)}
+                      className={`service-card ${
+                        isSelected ? 'selected' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${
+                            isSelected ? 'bg-primary-500 border-primary-500' : 'border-gray-300'
+                          }`}>
+                            {isSelected && (
+                              <Check size={12} className="text-white" />
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-gray-900">{service.name}</h3>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-primary-600">
+                            R$ {service.price}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
+              
+              {booking.services && booking.services.length > 0 && (
+                <>
                   <motion.div
-                    key={service.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleServiceSelect(service)}
-                    className={`service-card ${
-                      booking.service?.id === service.id ? 'selected' : ''
-                    }`}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gray-50 rounded-lg p-4 mt-6"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div>
-                          <h3 className="font-medium text-gray-900">{service.name}</h3>
-                          <p className="text-sm text-gray-500">{service.duration} minutos</p>
+                    <h3 className="font-medium text-gray-900 mb-3">Serviços Selecionados:</h3>
+                    <div className="space-y-2">
+                      {booking.services.map((service) => (
+                        <div key={service.id} className="flex justify-between items-center">
+                          <span className="text-gray-700">{service.name}</span>
+                          <span className="font-medium text-primary-600">R$ {service.price}</span>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-semibold text-primary-600">
-                          R$ {service.price}
-                        </div>
-                      </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between items-center">
+                      <span className="font-semibold text-gray-900">Total:</span>
+                      <span className="font-bold text-lg text-primary-600">
+                        R$ {booking.services.reduce((total, service) => total + service.price, 0)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-500 mt-2">
+                      Duração total: {booking.services.reduce((total, service) => total + service.duration, 0)} minutos
                     </div>
                   </motion.div>
-                ))}
-              </div>
+                  
+                  <motion.button
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleContinueToDate}
+                    className="btn-primary w-full mt-4"
+                  >
+                    Continuar → Escolher Data
+                  </motion.button>
+                </>
+              )}
             </motion.div>
           )}
 
@@ -439,9 +586,10 @@ export default function HomePage() {
                     required
                     placeholder="(11) 99999-9999"
                     value={booking.phone || ''}
-                    onChange={(e) => setBooking(prev => ({ ...prev, phone: e.target.value }))}
+                    onChange={handlePhoneChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                     readOnly={!!searchParams.get('phone')}
+                    maxLength={15}
                   />
                   {searchParams.get('phone') && (
                     <p className="text-xs text-green-600 mt-1">
@@ -467,11 +615,32 @@ export default function HomePage() {
                 <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                   <h4 className="font-medium text-gray-900">Resumo do agendamento:</h4>
                   <div className="text-sm text-gray-600 space-y-1">
-                    <div>Serviço: {booking.service?.name}</div>
+                    <div>
+                      <span className="font-medium">Serviços:</span>
+                      <div className="ml-2 mt-1">
+                        {booking.services?.map((service, index) => (
+                          <div key={service.id} className="flex justify-between items-center py-1">
+                            <span>• {service.name} ({service.duration}min)</span>
+                            <span className="text-primary-600">R$ {service.price}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Duração Total:</span>
+                        <span>{getTotalDuration()} minutos</span>
+                      </div>
+                    </div>
                     <div>Data: {booking.date && format(booking.date, "dd 'de' MMMM", { locale: ptBR })}</div>
                     <div>Horário: {booking.time}</div>
                     <div>Local: Rua das Flores, 123</div>
-                    <div className="font-medium text-primary-600">Valor: R$ {booking.service?.price}</div>
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between items-center font-medium text-primary-600">
+                        <span>Valor Total:</span>
+                        <span>R$ {getTotalPrice()}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
