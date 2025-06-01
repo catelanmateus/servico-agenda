@@ -90,11 +90,7 @@ const Navigation = () => {
                     className="flex items-center space-x-2 text-gray-700 hover:text-gray-900 focus:outline-none"
                   >
                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                      {user.avatar ? (
-                        <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full" />
-                      ) : (
-                        <User className="w-4 h-4" />
-                      )}
+                      <User className="w-4 h-4" />
                     </div>
                     <span className="hidden lg:block">{user.name}</span>
                   </button>

@@ -1,5 +1,7 @@
 # 🏪 Sistema de Agendamento para Barbearia
 
+<!-- Trigger Vercel deploy -->
+
 Um sistema completo de agendamento online para barbearias, desenvolvido com Next.js 14, TypeScript e Tailwind CSS.
 
 ## ✨ Funcionalidades

@@ -16,6 +16,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>
   register: (userData: RegisterData) => Promise<boolean>
   logout: () => void
+  updateUser: (userData: Partial<User>) => Promise<boolean>
   isLoading: boolean
 }
 
@@ -116,11 +117,35 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user')
   }
 
+  const updateUser = async (userData: Partial<User>): Promise<boolean> => {
+    if (!user) return false
+    
+    try {
+      const updatedUser = { ...user, ...userData }
+      setUser(updatedUser)
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      
+      // Atualizar também no array de usuários
+      const users = JSON.parse(localStorage.getItem('users') || '[]')
+      const userIndex = users.findIndex((u: any) => u.id === user.id)
+      if (userIndex !== -1) {
+        users[userIndex] = { ...users[userIndex], ...userData }
+        localStorage.setItem('users', JSON.stringify(users))
+      }
+      
+      return true
+    } catch (error) {
+      console.error('Erro ao atualizar usuário:', error)
+      return false
+    }
+  }
+
   const value = {
     user,
     login,
     register,
     logout,
+    updateUser,
     isLoading
   }
 

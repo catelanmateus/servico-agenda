@@ -21,7 +21,7 @@ interface FormData {
 const RegisterPage = () => {
   const router = useRouter()
   const { register } = useAuth()
-  const [step, setStep] = useState<'userType' | 'basicInfo' | 'security' | 'success'>(1)
+  const [step, setStep] = useState<'userType' | 'basicInfo' | 'security' | 'success'>('userType')
   const [formData, setFormData] = useState<FormData>({
     userType: null,
     name: '',
@@ -43,6 +43,15 @@ const RegisterPage = () => {
     checkBiometricSupport()
   }, [])
 
+  const getStepNumber = (currentStep: string): number => {
+    switch (currentStep) {
+      case 'userType': return 1
+      case 'basicInfo': return 2
+      case 'security': return 3
+      default: return 1
+    }
+  }
+
   const checkBiometricSupport = async () => {
     try {
       if (window.PublicKeyCredential) {
@@ -55,10 +64,10 @@ const RegisterPage = () => {
     }
   }
 
-  const validateStep = (currentStep: number): boolean => {
+  const validateStep = (currentStep: string): boolean => {
     const newErrors: Record<string, string> = {}
 
-    if (currentStep === 2) {
+    if (currentStep === 'basicInfo') {
       if (!formData.name.trim()) newErrors.name = 'Nome é obrigatório'
       if (!formData.email.trim()) newErrors.email = 'Email é obrigatório'
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -70,7 +79,7 @@ const RegisterPage = () => {
       }
     }
 
-    if (currentStep === 3) {
+    if (currentStep === 'security') {
       if (formData.password.length < 6) {
         newErrors.password = 'Senha deve ter pelo menos 6 caracteres'
       }
@@ -88,7 +97,13 @@ const RegisterPage = () => {
 
   const handleNext = () => {
     if (validateStep(step)) {
-      setStep(step + 1)
+      if (step === 'userType') {
+        setStep('basicInfo')
+      } else if (step === 'basicInfo') {
+        setStep('security')
+      } else if (step === 'security') {
+        setStep('success')
+      }
     }
   }
 
@@ -129,7 +144,7 @@ const RegisterPage = () => {
   }
 
   const handleSubmit = async () => {
-    if (!validateStep(3)) return
+    if (!validateStep('security')) return
 
     setIsLoading(true)
     try {
@@ -187,13 +202,13 @@ const RegisterPage = () => {
           {step !== 'success' && (
             <div className="mb-8">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-600">Passo {step} de 3</span>
-                <span className="text-sm text-gray-500">{Math.round((step / 3) * 100)}%</span>
+                <span className="text-sm font-medium text-gray-600">Passo {getStepNumber(step)} de 3</span>
+                <span className="text-sm text-gray-500">{Math.round((getStepNumber(step) / 3) * 100)}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(step / 3) * 100}%` }}
+                  style={{ width: `${(getStepNumber(step) / 3) * 100}%` }}
                 />
               </div>
             </div>
@@ -201,7 +216,7 @@ const RegisterPage = () => {
 
           <AnimatePresence mode="wait">
             {/* Step 1: User Type Selection */}
-            {step === 1 && (
+            {step === 'userType' && (
               <motion.div
                 key="userType"
                 initial={{ opacity: 0, x: 20 }}
@@ -221,7 +236,7 @@ const RegisterPage = () => {
                   <button
                     onClick={() => {
                       setFormData({ ...formData, userType: 'client' })
-                      setStep(2)
+                      setStep('basicInfo')
                     }}
                     className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all duration-200 text-left group"
                   >
@@ -239,7 +254,7 @@ const RegisterPage = () => {
                   <button
                     onClick={() => {
                       setFormData({ ...formData, userType: 'professional' })
-                      setStep(2)
+                      setStep('basicInfo')
                     }}
                     className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all duration-200 text-left group"
                   >
@@ -267,7 +282,7 @@ const RegisterPage = () => {
             )}
 
             {/* Step 2: Basic Information */}
-            {step === 2 && (
+            {step === 'basicInfo' && (
               <motion.div
                 key="basicInfo"
                 initial={{ opacity: 0, x: 20 }}
@@ -353,7 +368,7 @@ const RegisterPage = () => {
 
                 <div className="flex space-x-3 mt-6">
                   <button
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep('userType')}
                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   >
                     Voltar
@@ -370,7 +385,7 @@ const RegisterPage = () => {
             )}
 
             {/* Step 3: Security Setup */}
-            {step === 3 && (
+            {step === 'security' && (
               <motion.div
                 key="security"
                 initial={{ opacity: 0, x: 20 }}
@@ -500,7 +515,7 @@ const RegisterPage = () => {
 
                 <div className="flex space-x-3 mt-6">
                   <button
-                    onClick={() => setStep(2)}
+                    onClick={() => setStep('basicInfo')}
                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   >
                     Voltar
