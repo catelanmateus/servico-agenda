@@ -10,12 +10,12 @@ let tempReservations: any[] = []
 function generateSmartSlots(serviceDuration: number, date: string, barberId: string) {
   // Horários de funcionamento
   const workingHours = {
-    morning: { start: '09:00', end: '12:00' },
+    morning: { start: '08:00', end: '12:00' },
     afternoon: { start: '14:00', end: '18:00' }
   }
 
-  // Intervalo fixo de 15 minutos para todos os horários
-  const slotInterval = 15
+  // Intervalo fixo de 30 minutos para todos os horários
+  const slotInterval = 30
 
   const slots: string[] = []
 
@@ -107,6 +107,20 @@ export async function GET(request: NextRequest) {
         const slotStart = timeToMinutes(timeSlot)
         const slotEnd = slotStart + duration
         
+        // Para serviços de 45 minutos, verificar se há conflito com o próximo slot de 30 min
+        if (duration > 30) {
+          const nextSlotTime = minutesToTime(slotStart + 30)
+          const hasNextSlotConflict = existingAppointments.some(apt => {
+            return format(new Date(apt.date), 'yyyy-MM-dd') === format(new Date(date), 'yyyy-MM-dd') &&
+                   apt.time === nextSlotTime &&
+                   apt.barberId === barberId
+          })
+          
+          if (hasNextSlotConflict) {
+            return false
+          }
+        }
+        
         return !existingAppointments.some(apt => {
           const aptStart = timeToMinutes(apt.time)
           const aptEnd = aptStart + (apt.totalDuration || 30)
@@ -160,6 +174,26 @@ export async function POST(request: NextRequest) {
         { error: 'Este horário já foi agendado' },
         { status: 409 }
       )
+    }
+
+    // Verificar conflitos para serviços de duração maior que 30 minutos
+    const serviceDuration = totalDuration || 30
+    if (serviceDuration > 30) {
+      const timeStart = timeToMinutes(time)
+      const nextSlotTime = minutesToTime(timeStart + 30)
+      
+      const nextSlotConflict = appointments.find(apt => 
+        format(new Date(apt.date), 'yyyy-MM-dd') === format(new Date(date), 'yyyy-MM-dd') &&
+        apt.time === nextSlotTime &&
+        apt.barberId === barberId
+      )
+      
+      if (nextSlotConflict) {
+        return NextResponse.json(
+          { error: `Não é possível agendar serviço de ${serviceDuration} minutos às ${time}. Há um agendamento às ${nextSlotTime}.` },
+          { status: 409 }
+        )
+      }
     }
 
     // Criar novo agendamento
