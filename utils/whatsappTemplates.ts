@@ -11,6 +11,7 @@ interface AppointmentData {
   time: string
   clientName: string
   phone: string
+  cancelToken?: string
 }
 
 export const whatsappTemplates = {
@@ -30,6 +31,9 @@ Local: Rua das Flores, 123
 Valor: R$ ${data.service.price}
 
 ✅ Estamos te esperando!
+
+❌ *Precisa cancelar?*
+${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/cancel/${data.cancelToken}
 
 _Barbearia Premium_
 📞 (11) 99999-9999`
@@ -84,7 +88,9 @@ Serviço: ${data.service.icon} ${data.service.name}
 Data: ${formattedDate}
 Horário: ${data.time}
 
-Para reagendar, acesse nosso site ou entre em contato.
+🔄 *Quer reagendar?*
+Clique aqui para agendar novamente:
+${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}?phone=${encodeURIComponent(data.phone)}
 
 _Barbearia Premium_
 📞 (11) 99999-9999`

@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar novo agendamento
+    // Gerar token único para cancelamento
+    const cancelToken = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    
     const newAppointment = {
       id: Date.now().toString(),
       service,
@@ -82,7 +85,10 @@ export async function POST(request: NextRequest) {
       phone,
       barberId,
       status: 'confirmed',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      cancelToken,
+      reminderSent: false,
+      reminderSentAt: null
     }
 
     appointments.push(newAppointment)

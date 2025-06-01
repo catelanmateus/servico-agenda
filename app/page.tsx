@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Calendar, Clock, User, Phone, Scissors, Check } from 'lucide-react'
 import { format, addDays, isSameDay } from 'date-fns'
@@ -45,6 +46,7 @@ const getNextDays = (count: number = 7): Date[] => {
 }
 
 export default function HomePage() {
+  const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [booking, setBooking] = useState<BookingData>({})
   const [availableDays] = useState(getNextDays())
@@ -89,12 +91,21 @@ export default function HomePage() {
   }, [booking])
 
   useEffect(() => {
+    // Get phone from URL parameter
+    const phoneFromUrl = searchParams.get('phone')
+    
     // Load progress from localStorage
     const saved = localStorage.getItem('booking-progress')
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
         if (parsed.date) parsed.date = new Date(parsed.date)
+        
+        // Use phone from URL if available, otherwise use saved phone
+        if (phoneFromUrl) {
+          parsed.phone = phoneFromUrl
+        }
+        
         setBooking(parsed)
         
         // Determine current step based on saved data
@@ -430,7 +441,13 @@ export default function HomePage() {
                     value={booking.phone || ''}
                     onChange={(e) => setBooking(prev => ({ ...prev, phone: e.target.value }))}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    readOnly={!!searchParams.get('phone')}
                   />
+                  {searchParams.get('phone') && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✅ Número confirmado via WhatsApp
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -458,10 +475,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <input type="checkbox" required className="rounded" />
-                  <span>Confirmar agendamento por WhatsApp</span>
-                </div>
+
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}

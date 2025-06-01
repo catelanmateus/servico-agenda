@@ -10,6 +10,7 @@ interface Appointment {
   barberId: string
   status: 'confirmed' | 'cancelled' | 'completed'
   createdAt: string
+  cancelToken?: string
 }
 
 interface TimeSlot {

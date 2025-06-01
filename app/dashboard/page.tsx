@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Calendar, Clock, User, Phone, DollarSign, Settings, Plus, Check, X, MessageCircle } from 'lucide-react'
+import { Calendar, Clock, User, Phone, DollarSign, Settings, Plus, Check, X, MessageCircle, CheckCircle, XCircle, AlertCircle, Bell, BellOff, Play, Square } from 'lucide-react'
 import { format, addDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useAppointments } from '../../hooks/useAppointments'
@@ -15,7 +15,7 @@ interface Appointment {
   time: string
   date: string
   barberId: string
-  status: 'confirmed' | 'cancelled' | 'completed'
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
   createdAt: string
 }
 
@@ -76,6 +76,8 @@ export default function DashboardPage() {
   const [showAddSlot, setShowAddSlot] = useState(false)
   const [newSlotTime, setNewSlotTime] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [cronJobs, setCronJobs] = useState<any[]>([])
+  const [cronLoading, setCronLoading] = useState(false)
   
   const {
     loading: apiLoading,
@@ -87,6 +89,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadAppointments()
+    loadCronStatus()
   }, [])
 
   const loadAppointments = async () => {
@@ -99,6 +102,48 @@ export default function DashboardPage() {
       console.error('Erro ao carregar agendamentos:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadCronStatus = async () => {
+    try {
+      setCronLoading(true)
+      const response = await fetch('/api/cron')
+      if (response.ok) {
+        const data = await response.json()
+        setCronJobs(data.jobs || [])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar status dos cron jobs:', error)
+    } finally {
+      setCronLoading(false)
+    }
+  }
+
+  const controlCronJob = async (action: string, jobName?: string) => {
+    try {
+      setCronLoading(true)
+      const response = await fetch('/api/cron', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, jobName }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCronJobs(data.jobs || [])
+        alert(data.message)
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Erro ao controlar cron job')
+      }
+    } catch (error) {
+      console.error('Erro ao controlar cron job:', error)
+      alert('Erro ao controlar cron job')
+    } finally {
+      setCronLoading(false)
     }
   }
 
@@ -148,6 +193,10 @@ export default function DashboardPage() {
       setNewSlotTime('')
       setShowAddSlot(false)
     }
+  }
+
+  const getReminderJob = () => {
+    return cronJobs.find(job => job.name === 'reminder-check')
   }
 
   const getStatusColor = (status: Appointment['status']) => {
@@ -243,6 +292,113 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         </div>
+
+        {/* Controle de Lembretes Automáticos */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="card"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Bell className="w-5 h-5 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Lembretes Automáticos</h3>
+            </div>
+            <button
+              onClick={loadCronStatus}
+              disabled={cronLoading}
+              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+            >
+              {cronLoading ? 'Carregando...' : 'Atualizar'}
+            </button>
+          </div>
+          
+          {cronJobs.length > 0 ? (
+            <div className="space-y-3">
+              {cronJobs.map((job) => (
+                <div key={job.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      job.enabled ? 'bg-green-500' : 'bg-gray-400'
+                    }`} />
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {job.name === 'reminder-check' ? 'Verificação de Lembretes' : job.name}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {job.schedule} • {job.enabled ? 'Ativo' : 'Inativo'}
+                      </p>
+                      {job.lastRun && (
+                        <p className="text-xs text-gray-500">
+                          Última execução: {format(new Date(job.lastRun), 'dd/MM HH:mm', { locale: ptBR })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    {job.enabled ? (
+                      <button
+                        onClick={() => controlCronJob('disable', job.name)}
+                        disabled={cronLoading}
+                        className="flex items-center space-x-1 px-3 py-1 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 disabled:opacity-50"
+                      >
+                        <Square size={14} />
+                        <span>Parar</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => controlCronJob('enable', job.name)}
+                        disabled={cronLoading}
+                        className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 disabled:opacity-50"
+                      >
+                        <Play size={14} />
+                        <span>Iniciar</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              <div className="pt-3 border-t border-gray-200">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-2 text-gray-600">
+                    <AlertCircle size={16} />
+                    <span>Os lembretes são enviados automaticamente 1 hora antes do agendamento</span>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => controlCronJob('start-all')}
+                      disabled={cronLoading}
+                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      Iniciar Todos
+                    </button>
+                    <button
+                      onClick={() => controlCronJob('stop-all')}
+                      disabled={cronLoading}
+                      className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                    >
+                      Parar Todos
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500">
+              <BellOff size={48} className="mx-auto mb-2 opacity-50" />
+              <p>Nenhum cron job configurado</p>
+              <button
+                onClick={loadCronStatus}
+                className="mt-2 text-blue-600 hover:text-blue-800"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
+        </motion.div>
 
         {/* Date Selector */}
         <div className="card">

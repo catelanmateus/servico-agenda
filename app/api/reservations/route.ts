@@ -141,8 +141,8 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// Exportar função para uso interno
-export function isTimeReserved(date: string, time: string, barberId: string = '1'): boolean {
+// Função interna para verificar se horário está reservado
+function isTimeReserved(date: string, time: string, barberId: string = '1'): boolean {
   cleanExpiredReservations()
   return tempReservations.some(res => 
     format(new Date(res.date), 'yyyy-MM-dd') === format(new Date(date), 'yyyy-MM-dd') &&
