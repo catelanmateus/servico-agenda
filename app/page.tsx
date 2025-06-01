@@ -61,7 +61,7 @@ export default function HomePage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [tempReservationToken, setTempReservationToken] = useState<string | null>(null)
-  const [phoneError, setPhoneError] = useState('')
+
   
   // Redirecionar para login se não estiver autenticado
   useEffect(() => {
@@ -106,38 +106,7 @@ export default function HomePage() {
     }
   }
 
-  const formatPhoneNumber = (value: string) => {
-    // Remove tudo que não é número
-    const numbers = value.replace(/\D/g, '')
-    
-    // Limita a 11 dígitos
-    const limitedNumbers = numbers.slice(0, 11)
-    
-    // Aplica máscara progressiva
-    if (limitedNumbers.length <= 2) {
-      return limitedNumbers
-    } else if (limitedNumbers.length <= 7) {
-      return limitedNumbers.replace(/(\d{2})(\d+)/, '($1) $2')
-    } else {
-      return limitedNumbers.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3')
-    }
-  }
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(e.target.value)
-    setBooking(prev => ({ ...prev, phone: formatted }))
-    // Limpar erro quando usuário começar a digitar
-    if (phoneError) {
-      setPhoneError('')
-    }
-  }
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    // Permitir apenas letras, espaços e acentos
-    const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '')
-    setBooking(prev => ({ ...prev, name: filteredValue }))
-  }
 
   useEffect(() => {
     // Save progress to localStorage
@@ -168,8 +137,7 @@ export default function HomePage() {
         setBooking(parsed)
         
         // Determine current step based on saved data
-        if (parsed.name && parsed.phone) setStep(4)
-        else if (parsed.date && parsed.time) setStep(3)
+        if (parsed.date && parsed.time) setStep(3)
         else if (parsed.services?.length > 0) setStep(2)
       } catch (e) {
         console.log('Error loading saved progress')
@@ -239,36 +207,18 @@ export default function HomePage() {
     }
   }
 
-  const validatePhone = (phone: string) => {
-    const numbers = phone.replace(/\D/g, '')
-    return numbers.length === 11
-  }
 
-  const validateName = (name: string) => {
-    const nameRegex = /^[a-zA-ZÀ-ÿ\s]+$/
-    return nameRegex.test(name.trim()) && name.trim().length >= 2
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Limpar erros anteriores
-    setPhoneError('')
-    
-    if (!booking.services?.length || !booking.date || !booking.time || !booking.name || !booking.phone) {
-      alert('Por favor, preencha todos os campos')
+    if (!booking.services?.length || !booking.date || !booking.time) {
+      alert('Por favor, complete todos os passos do agendamento')
       return
     }
 
-    // Validar telefone (deve ter exatamente 11 dígitos)
-    if (!validatePhone(booking.phone)) {
-      setPhoneError('Informar um número válido')
-      return
-    }
-
-    // Validar nome (apenas letras e espaços)
-    if (!validateName(booking.name)) {
-      alert('Preencher o campo.')
+    if (!user) {
+      alert('Você precisa estar logado para fazer um agendamento')
       return
     }
     
@@ -279,8 +229,8 @@ export default function HomePage() {
         service: booking.services.map(s => s.name).join(', '),
         date: format(booking.date, 'yyyy-MM-dd'),
         time: booking.time,
-        name: booking.name,
-        phone: booking.phone,
+        name: user.name || user.email,
+        phone: user.phone || '',
         totalDuration: getTotalDuration(),
         totalPrice: getTotalPrice()
       }
@@ -322,7 +272,7 @@ export default function HomePage() {
 
   const ProgressIndicator = () => (
     <div className="flex items-center justify-center space-x-4 mb-8">
-      {[1, 2, 3].map((stepNumber) => (
+      {[1, 2].map((stepNumber) => (
         <div key={stepNumber} className="flex items-center">
           <div className={`progress-step ${
             step > stepNumber ? 'completed' : 
@@ -330,7 +280,7 @@ export default function HomePage() {
           }`}>
             {step > stepNumber ? <Check size={16} /> : stepNumber}
           </div>
-          {stepNumber < 3 && (
+          {stepNumber < 2 && (
             <div className={`w-8 h-0.5 mx-2 ${
               step > stepNumber ? 'bg-primary-500' : 'bg-gray-200'
             }`} />
@@ -601,55 +551,11 @@ export default function HomePage() {
             >
               <div className="text-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Quase pronto!
+                  Confirmar Agendamento
                 </h2>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    📱 Seu WhatsApp
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="(11) 99999-9999"
-                    value={booking.phone || ''}
-                    onChange={handlePhoneChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all ${
-                      phoneError ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    readOnly={!!searchParams.get('phone')}
-                    maxLength={15}
-                  />
-                  {phoneError && (
-                    <p className="text-sm text-red-600 mt-1">
-                      {phoneError}
-                    </p>
-                  )}
-                  {searchParams.get('phone') && (
-                    <p className="text-xs text-green-600 mt-1">
-                      ✅ Número confirmado via WhatsApp
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    👤 Seu nome
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="João Silva"
-                    value={booking.name || ''}
-                    onChange={handleNameChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                    minLength={2}
-                    pattern="[a-zA-ZÀ-ÿ\s]+"
-                    title="Digite apenas letras e espaços"
-                  />
-                </div>
 
                 <div className="border border-gray-200 rounded-lg p-4 space-y-3">
                   <h4 className="font-medium text-gray-900 text-lg">Resumo do agendamento:</h4>
