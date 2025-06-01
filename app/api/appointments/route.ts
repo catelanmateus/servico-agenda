@@ -23,7 +23,7 @@ function generateSmartSlots(serviceDuration: number, date: string, barberId: str
   let currentTime = timeToMinutes(workingHours.morning.start)
   const morningEnd = timeToMinutes(workingHours.morning.end)
   
-  while (currentTime + serviceDuration <= morningEnd) {
+  while (currentTime < morningEnd) {
     slots.push(minutesToTime(currentTime))
     currentTime += slotInterval
   }

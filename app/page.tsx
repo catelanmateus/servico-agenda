@@ -55,9 +55,10 @@ export default function HomePage() {
   const [booking, setBooking] = useState<BookingData>({ services: [] })
   const [availableDays] = useState(getNextDays())
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [tempReservationToken, setTempReservationToken] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState('')
   
   // Debug log
   console.log('Current booking state:', booking)
@@ -115,6 +116,17 @@ export default function HomePage() {
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhoneNumber(e.target.value)
     setBooking(prev => ({ ...prev, phone: formatted }))
+    // Limpar erro quando usuário começar a digitar
+    if (phoneError) {
+      setPhoneError('')
+    }
+  }
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    // Permitir apenas letras, espaços e acentos
+    const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\s]/g, '')
+    setBooking(prev => ({ ...prev, name: filteredValue }))
   }
 
   useEffect(() => {
@@ -225,11 +237,36 @@ export default function HomePage() {
     }
   }
 
+  const validatePhone = (phone: string) => {
+    const numbers = phone.replace(/\D/g, '')
+    return numbers.length === 11
+  }
+
+  const validateName = (name: string) => {
+    const nameRegex = /^[a-zA-ZÀ-ÿ\s]+$/
+    return nameRegex.test(name.trim()) && name.trim().length >= 2
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Limpar erros anteriores
+    setPhoneError('')
+    
     if (!booking.services?.length || !booking.date || !booking.time || !booking.name || !booking.phone) {
       alert('Por favor, preencha todos os campos')
+      return
+    }
+
+    // Validar telefone (deve ter exatamente 11 dígitos)
+    if (!validatePhone(booking.phone)) {
+      setPhoneError('Informar um número válido')
+      return
+    }
+
+    // Validar nome (apenas letras e espaços)
+    if (!validateName(booking.name)) {
+      alert('Preencher o campo.')
       return
     }
     
@@ -309,43 +346,10 @@ export default function HomePage() {
           animate={{ scale: 1, opacity: 1 }}
           className="card max-w-md w-full text-center"
         >
-          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="w-8 h-8 text-primary-600" />
-          </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Agendamento Confirmado!</h2>
           <p className="text-gray-600 mb-6">
             Você receberá uma confirmação no WhatsApp em alguns minutos.
           </p>
-          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Serviços:</span>
-              <div className="text-right">
-                {booking.services?.map((service, index) => (
-                  <div key={service.id} className="font-medium">
-                    {service.icon} {service.name}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Data:</span>
-              <span className="font-medium">
-                {booking.date && format(booking.date, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-              </span>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Horário:</span>
-              <span className="font-medium">{booking.time}</span>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Duração Total:</span>
-              <span className="font-medium">{getTotalDuration()} minutos</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Valor Total:</span>
-              <span className="font-medium text-primary-600">R$ {getTotalPrice()}</span>
-            </div>
-          </div>
           <button
             onClick={() => {
               setShowSuccess(false)
@@ -367,7 +371,7 @@ export default function HomePage() {
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-md mx-auto px-4 py-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">🏪 Barbearia Silva</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">🏪 Barbearia Catelan</h1>
           </div>
         </div>
       </div>
@@ -388,17 +392,6 @@ export default function HomePage() {
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   Que serviços você quer?
                 </h2>
-                <p className="text-gray-600">Escolha um ou mais serviços</p>
-                {booking.services && booking.services.length > 0 && (
-                  <div className="mt-4 p-3 bg-primary-50 rounded-lg">
-                    <p className="text-sm text-primary-700">
-                      {booking.services.length} serviço{booking.services.length > 1 ? 's' : ''} selecionado{booking.services.length > 1 ? 's' : ''}
-                    </p>
-                    <p className="text-sm font-medium text-primary-800">
-                      Total: {getTotalDuration()} min • R$ {getTotalPrice()}
-                    </p>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-3">
@@ -439,43 +432,27 @@ export default function HomePage() {
               </div>
               
               {booking.services && booking.services.length > 0 && (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-gray-50 rounded-lg p-4 mt-6"
-                  >
-                    <h3 className="font-medium text-gray-900 mb-3">Serviços Selecionados:</h3>
-                    <div className="space-y-2">
-                      {booking.services.map((service) => (
-                        <div key={service.id} className="flex justify-between items-center">
-                          <span className="text-gray-700">{service.name}</span>
-                          <span className="font-medium text-primary-600">R$ {service.price}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between items-center">
-                      <span className="font-semibold text-gray-900">Total:</span>
-                      <span className="font-bold text-lg text-primary-600">
-                        R$ {booking.services.reduce((total, service) => total + service.price, 0)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-500 mt-2">
-                      Duração total: {booking.services.reduce((total, service) => total + service.duration, 0)} minutos
-                    </div>
-                  </motion.div>
-                  
-                  <motion.button
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleContinueToDate}
-                    className="btn-primary w-full mt-4"
-                  >
-                    Continuar → Escolher Data
-                  </motion.button>
-                </>
+                <div className="mt-4 p-3 bg-primary-50 rounded-lg">
+                  <p className="text-sm text-primary-700">
+                    {booking.services.length} serviço{booking.services.length > 1 ? 's' : ''} selecionado{booking.services.length > 1 ? 's' : ''}
+                  </p>
+                  <p className="text-sm font-medium text-primary-800">
+                    Total: {getTotalDuration()} min • R$ {getTotalPrice()}
+                  </p>
+                </div>
+              )}
+              
+              {booking.services && booking.services.length > 0 && (
+                <motion.button
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleContinueToDate}
+                  className="btn-primary w-full mt-4"
+                >
+                  Continuar
+                </motion.button>
               )}
             </motion.div>
           )}
@@ -492,13 +469,12 @@ export default function HomePage() {
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   Quando você quer vir?
                 </h2>
-                <p className="text-gray-600">Escolha o melhor dia e horário</p>
               </div>
 
               {/* Date Selection */}
-              <div className="space-y-4">
+              <div className="space-y-4 border border-gray-200 rounded-lg p-4">
                 <h3 className="font-medium text-gray-900">Escolha o dia:</h3>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {availableDays.slice(0, 7).map((date, index) => {
                     const isToday = isSameDay(date, new Date())
                     const isTomorrow = isSameDay(date, addDays(new Date(), 1))
@@ -515,7 +491,7 @@ export default function HomePage() {
                         }`}
                       >
                         <div className="font-medium">
-                          {format(date, 'EEEE', { locale: ptBR }).toUpperCase()}
+                          {format(date, 'EEEE', { locale: ptBR }).replace('-feira', '').toUpperCase()}
                         </div>
                         <div className="text-xs opacity-75">
                           {format(date, 'dd/MM', { locale: ptBR })}
@@ -531,27 +507,77 @@ export default function HomePage() {
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
-                  className="space-y-4"
+                  className="space-y-4 border border-gray-200 rounded-lg p-4"
                 >
                   <h3 className="font-medium text-gray-900">Escolha o horário:</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {timeSlots.map((slot) => (
-                      <motion.button
-                        key={slot.time}
-                        whileHover={slot.available ? { scale: 1.05 } : {}}
-                        whileTap={slot.available ? { scale: 0.95 } : {}}
-                        onClick={() => slot.available && handleTimeSelect(slot.time)}
-                        disabled={!slot.available}
-                        className={`time-slot ${
-                          booking.time === slot.time ? 'selected' : 
-                          !slot.available ? 'unavailable' : ''
-                        }`}
-                      >
-                        {slot.time}
-                      </motion.button>
-                    ))}
-                  </div>
-                  {timeSlots.filter(s => !s.available).length > timeSlots.length * 0.7 && (
+                  
+                  {/* Morning Slots */}
+                  {timeSlots.filter(slot => {
+                    const hour = parseInt(slot.time.split(':')[0])
+                    return hour < 12 && slot.available
+                  }).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium text-gray-800">Manhã</h4>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                         {timeSlots
+                           .filter(slot => {
+                             const hour = parseInt(slot.time.split(':')[0])
+                             return hour < 12 && slot.available
+                           })
+                          .map((slot) => (
+                            <motion.button
+                              key={slot.time}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleTimeSelect(slot.time)}
+                              className={`time-slot ${
+                                booking.time === slot.time ? 'selected' : ''
+                              }`}
+                            >
+                              {slot.time}
+                            </motion.button>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Afternoon Slots */}
+                  {timeSlots.filter(slot => {
+                    const hour = parseInt(slot.time.split(':')[0])
+                    return hour >= 12 && slot.available
+                  }).length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-medium text-gray-800">Tarde</h4>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                         {timeSlots
+                           .filter(slot => {
+                             const hour = parseInt(slot.time.split(':')[0])
+                             return hour >= 12 && slot.available
+                           })
+                          .map((slot) => (
+                            <motion.button
+                              key={slot.time}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleTimeSelect(slot.time)}
+                              className={`time-slot ${
+                                booking.time === slot.time ? 'selected' : ''
+                              }`}
+                            >
+                              {slot.time}
+                            </motion.button>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  )}
+                  
+                  {timeSlots.filter(s => s.available).length <= 3 && timeSlots.filter(s => s.available).length > 0 && (
                     <div className="text-center text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
                       ⏰ Restam poucos horários disponíveis hoje!
                     </div>
@@ -573,7 +599,6 @@ export default function HomePage() {
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   Quase pronto!
                 </h2>
-                <p className="text-gray-600">Só preciso de algumas informações</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -587,10 +612,17 @@ export default function HomePage() {
                     placeholder="(11) 99999-9999"
                     value={booking.phone || ''}
                     onChange={handlePhoneChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all ${
+                      phoneError ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     readOnly={!!searchParams.get('phone')}
                     maxLength={15}
                   />
+                  {phoneError && (
+                    <p className="text-sm text-red-600 mt-1">
+                      {phoneError}
+                    </p>
+                  )}
                   {searchParams.get('phone') && (
                     <p className="text-xs text-green-600 mt-1">
                       ✅ Número confirmado via WhatsApp
@@ -607,39 +639,53 @@ export default function HomePage() {
                     required
                     placeholder="João Silva"
                     value={booking.name || ''}
-                    onChange={(e) => setBooking(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={handleNameChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                    minLength={2}
+                    pattern="[a-zA-ZÀ-ÿ\s]+"
+                    title="Digite apenas letras e espaços"
                   />
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <h4 className="font-medium text-gray-900">Resumo do agendamento:</h4>
-                  <div className="text-sm text-gray-600 space-y-1">
+                <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                  <h4 className="font-medium text-gray-900 text-lg">Resumo do agendamento:</h4>
+                  
+                  <div className="space-y-2">
                     <div>
-                      <span className="font-medium">Serviços:</span>
-                      <div className="ml-2 mt-1">
+                      <span className="font-medium text-gray-900">Serviços:</span>
+                      <div className="mt-1 space-y-1">
                         {booking.services?.map((service, index) => (
-                          <div key={service.id} className="flex justify-between items-center py-1">
-                            <span>• {service.name} ({service.duration}min)</span>
-                            <span className="text-primary-600">R$ {service.price}</span>
+                          <div key={service.id} className="flex justify-between items-center">
+                            <span className="text-gray-700">• {service.name}</span>
+                            <span className="font-medium text-gray-900">R$ {service.price}</span>
                           </div>
                         ))}
                       </div>
                     </div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">Duração Total:</span>
-                        <span>{getTotalDuration()} minutos</span>
-                      </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-900">Valor Total:</span>
+                      <span className="font-bold text-lg text-primary-600">R$ {getTotalPrice()}</span>
                     </div>
-                    <div>Data: {booking.date && format(booking.date, "dd 'de' MMMM", { locale: ptBR })}</div>
-                    <div>Horário: {booking.time}</div>
-                    <div>Local: Rua das Flores, 123</div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between items-center font-medium text-primary-600">
-                        <span>Valor Total:</span>
-                        <span>R$ {getTotalPrice()}</span>
-                      </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-900">Duração:</span>
+                      <span className="text-gray-700">{getTotalDuration()} minutos</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-900">Data:</span>
+                      <span className="text-gray-700">{booking.date && format(booking.date, "EEEE, dd 'de' MMMM", { locale: ptBR })}</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-900">Horário:</span>
+                      <span className="text-gray-700">{booking.time}</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-900">Endereço:</span>
+                      <span className="text-gray-700">Rua das Flores, 123</span>
                     </div>
                   </div>
                 </div>
@@ -656,10 +702,7 @@ export default function HomePage() {
                   {isLoading ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
                   ) : (
-                    <>
-                      <span>🎉</span>
-                      <span>Confirmar Agendamento</span>
-                    </>
+                    <span>Confirmar Agendamento</span>
                   )}
                 </motion.button>
               </form>
@@ -672,10 +715,20 @@ export default function HomePage() {
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            onClick={() => setStep(step - 1)}
+            onClick={() => {
+              // Se estiver voltando da etapa 3 para 2, limpar horário e cancelar reserva temporária
+              if (step === 3) {
+                setBooking(prev => ({ ...prev, time: undefined }))
+                if (tempReservationToken) {
+                  cancelTempReservation(tempReservationToken)
+                  setTempReservationToken(null)
+                }
+              }
+              setStep(step - 1)
+            }}
             className="mt-6 w-full btn-secondary"
           >
-            ← Voltar
+            Voltar
           </motion.button>
         )}
       </div>
