@@ -1,5 +1,6 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
+import AuthProvider from '../components/AuthProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,16 +26,18 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
-        <div className="min-h-screen flex flex-col">
-          <main className="flex-1">
-            {children}
-          </main>
-          <footer className="bg-white border-t border-gray-200 py-4">
-            <div className="max-w-md mx-auto px-4 text-center text-sm text-gray-500">
-              © 2024 ServiçoAgenda - Todos os direitos reservados
-            </div>
-          </footer>
-        </div>
+        <AuthProvider>
+          <div className="min-h-screen flex flex-col">
+            <main className="flex-1">
+              {children}
+            </main>
+            <footer className="bg-white border-t border-gray-200 py-4">
+              <div className="max-w-md mx-auto px-4 text-center text-sm text-gray-500">
+                © 2024 ServiçoAgenda - Todos os direitos reservados
+              </div>
+            </footer>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   )

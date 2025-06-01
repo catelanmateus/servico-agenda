@@ -1,590 +1,381 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Calendar, Clock, User, Phone, DollarSign, Settings, Plus, Check, X, MessageCircle, CheckCircle, XCircle, AlertCircle, Bell, BellOff, Play, Square } from 'lucide-react'
-import { format, addDays, isSameDay } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
-import { useAppointments } from '../../hooks/useAppointments'
+import { useRouter } from 'next/navigation'
+import { Calendar, Clock, User, Settings, Plus, Edit, Trash2, DollarSign } from 'lucide-react'
+import { useAuth } from '../../components/AuthProvider'
+import Navigation from '../../components/Navigation'
+
+interface Service {
+  id: string
+  name: string
+  price: number
+  duration: number
+  createdBy: string
+}
 
 interface Appointment {
   id: string
-  name: string
-  phone: string
-  service: string
-  time: string
-  date: string
-  barberId: string
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
-  createdAt: string
-}
-
-interface DashboardAppointment {
-  id: string
   clientName: string
   clientPhone: string
-  service: string
-  serviceIcon: string
+  date: string
   time: string
-  price: number
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  date: Date
-}
-
-interface DayStats {
-  appointments: number
-  revenue: number
-  completed: number
-}
-
-const getServiceDetails = (serviceName: string) => {
-  const services: { [key: string]: { icon: string; price: number } } = {
-    'Corte Masculino': { icon: '✂️', price: 25 },
-    'Barba': { icon: '🧔', price: 15 },
-    'Corte + Barba': { icon: '✂️🧔', price: 35 }
-  }
-  return services[serviceName] || { icon: '✂️', price: 25 }
-}
-
-const transformAppointment = (apt: Appointment): DashboardAppointment => {
-  const serviceDetails = getServiceDetails(apt.service)
-  return {
-    id: apt.id,
-    clientName: apt.name,
-    clientPhone: apt.phone,
-    service: apt.service,
-    serviceIcon: serviceDetails.icon,
-    time: apt.time,
-    price: serviceDetails.price,
-    status: apt.status === 'confirmed' ? 'confirmed' : apt.status === 'completed' ? 'completed' : 'cancelled',
-    date: new Date(apt.date)
-  }
-}
-
-const getNextDays = (count: number = 7): Date[] => {
-  const days: Date[] = []
-  for (let i = 0; i < count; i++) {
-    days.push(addDays(new Date(), i))
-  }
-  return days
+  services: Service[]
+  status: 'confirmed' | 'cancelled' | 'completed'
 }
 
 export default function DashboardPage() {
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [appointments, setAppointments] = useState<DashboardAppointment[]>([])
-  const [availableDays] = useState(getNextDays())
-  const [showAddSlot, setShowAddSlot] = useState(false)
-  const [newSlotTime, setNewSlotTime] = useState('')
+  const router = useRouter()
+  const { user, logout } = useAuth()
+  const [services, setServices] = useState<Service[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [showServiceForm, setShowServiceForm] = useState(false)
+  const [editingService, setEditingService] = useState<Service | null>(null)
+  const [serviceForm, setServiceForm] = useState({
+    name: '',
+    price: '',
+    duration: ''
+  })
   const [isLoading, setIsLoading] = useState(false)
-  const [cronJobs, setCronJobs] = useState<any[]>([])
-  const [cronLoading, setCronLoading] = useState(false)
-  
-  const {
-    loading: apiLoading,
-    error: apiError,
-    getAppointments,
-    updateAppointmentStatus,
-    cancelAppointment
-  } = useAppointments()
 
   useEffect(() => {
+    // Verificar se o usuário é profissional
+    if (!user) {
+      router.push('/login')
+      return
+    }
+    
+    if (user.role !== 'professional') {
+      router.push('/')
+      return
+    }
+
+    loadServices()
     loadAppointments()
-    loadCronStatus()
-  }, [])
+  }, [user, router])
 
-  const loadAppointments = async () => {
-    try {
-      setIsLoading(true)
-      const apiAppointments = await getAppointments()
-      const transformedAppointments = apiAppointments.map(transformAppointment)
-      setAppointments(transformedAppointments)
-    } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error)
-    } finally {
-      setIsLoading(false)
+  const loadServices = () => {
+    // Carregar serviços do localStorage (em produção seria uma API)
+    const savedServices = localStorage.getItem(`services_${user?.id}`)
+    if (savedServices) {
+      setServices(JSON.parse(savedServices))
+    } else {
+      // Serviços padrão
+      const defaultServices = [
+        { id: '1', name: 'Corte', price: 25, duration: 30, createdBy: user?.id || '' },
+        { id: '2', name: 'Barba', price: 15, duration: 15, createdBy: user?.id || '' },
+        { id: '3', name: 'Corte + Barba', price: 35, duration: 45, createdBy: user?.id || '' }
+      ]
+      setServices(defaultServices)
+      localStorage.setItem(`services_${user?.id}`, JSON.stringify(defaultServices))
     }
   }
 
-  const loadCronStatus = async () => {
-    try {
-      setCronLoading(true)
-      const response = await fetch('/api/cron')
-      if (response.ok) {
-        const data = await response.json()
-        setCronJobs(data.jobs || [])
-      }
-    } catch (error) {
-      console.error('Erro ao carregar status dos cron jobs:', error)
-    } finally {
-      setCronLoading(false)
-    }
-  }
-
-  const controlCronJob = async (action: string, jobName?: string) => {
-    try {
-      setCronLoading(true)
-      const response = await fetch('/api/cron', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action, jobName }),
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setCronJobs(data.jobs || [])
-        alert(data.message)
-      } else {
-        const error = await response.json()
-        alert(error.error || 'Erro ao controlar cron job')
-      }
-    } catch (error) {
-      console.error('Erro ao controlar cron job:', error)
-      alert('Erro ao controlar cron job')
-    } finally {
-      setCronLoading(false)
-    }
-  }
-
-  const todayAppointments = appointments.filter(apt => 
-    isSameDay(apt.date, selectedDate)
-  )
-
-  const dayStats: DayStats = {
-    appointments: todayAppointments.length,
-    revenue: todayAppointments.reduce((sum, apt) => sum + apt.price, 0),
-    completed: todayAppointments.filter(apt => apt.status === 'completed').length
-  }
-
-  const monthlyRevenue = appointments
-    .filter(apt => apt.date.getMonth() === new Date().getMonth())
-    .reduce((sum, apt) => sum + apt.price, 0)
-
-  const handleStatusChange = async (appointmentId: string, newStatus: DashboardAppointment['status']) => {
-    try {
-      setIsLoading(true)
-      const apiStatus = newStatus === 'pending' ? 'confirmed' : newStatus
-      await updateAppointmentStatus(appointmentId, apiStatus)
-      
-      setAppointments(prev => 
-        prev.map(apt => 
-          apt.id === appointmentId ? { ...apt, status: newStatus } : apt
-        )
+  const loadAppointments = () => {
+    // Carregar agendamentos do localStorage (em produção seria uma API)
+    const savedAppointments = localStorage.getItem('appointments')
+    if (savedAppointments) {
+      const allAppointments = JSON.parse(savedAppointments)
+      // Filtrar apenas agendamentos deste profissional
+      const myAppointments = allAppointments.filter((apt: any) => 
+        apt.professionalId === user?.id
       )
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error)
-      alert('Erro ao atualizar status do agendamento')
-    } finally {
-      setIsLoading(false)
+      setAppointments(myAppointments)
     }
   }
 
-  const handleWhatsApp = (phone: string, name: string, service: string, time: string) => {
-    const message = `Olá ${name}! Confirmando seu agendamento para ${service} hoje às ${time}. Nos vemos em breve! 😊`
-    const whatsappUrl = `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
-    window.open(whatsappUrl, '_blank')
+  const handleServiceSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!serviceForm.name || !serviceForm.price || !serviceForm.duration) {
+      alert('Por favor, preencha todos os campos')
+      return
+    }
+
+    const newService: Service = {
+      id: editingService?.id || Date.now().toString(),
+      name: serviceForm.name,
+      price: parseFloat(serviceForm.price),
+      duration: parseInt(serviceForm.duration),
+      createdBy: user?.id || ''
+    }
+
+    let updatedServices
+    if (editingService) {
+      updatedServices = services.map(s => s.id === editingService.id ? newService : s)
+    } else {
+      updatedServices = [...services, newService]
+    }
+
+    setServices(updatedServices)
+    localStorage.setItem(`services_${user?.id}`, JSON.stringify(updatedServices))
+    
+    // Reset form
+    setServiceForm({ name: '', price: '', duration: '' })
+    setEditingService(null)
+    setShowServiceForm(false)
   }
 
-  const addTimeSlot = () => {
-    if (newSlotTime) {
-      // In a real app, this would create an available time slot
-      console.log('Adding time slot:', newSlotTime)
-      setNewSlotTime('')
-      setShowAddSlot(false)
+  const handleEditService = (service: Service) => {
+    setEditingService(service)
+    setServiceForm({
+      name: service.name,
+      price: service.price.toString(),
+      duration: service.duration.toString()
+    })
+    setShowServiceForm(true)
+  }
+
+  const handleDeleteService = (serviceId: string) => {
+    if (confirm('Tem certeza que deseja excluir este serviço?')) {
+      const updatedServices = services.filter(s => s.id !== serviceId)
+      setServices(updatedServices)
+      localStorage.setItem(`services_${user?.id}`, JSON.stringify(updatedServices))
     }
   }
 
-  const getReminderJob = () => {
-    return cronJobs.find(job => job.name === 'reminder-check')
+  const getTodayAppointments = () => {
+    const today = new Date().toISOString().split('T')[0]
+    return appointments.filter(apt => apt.date === today)
   }
 
-  const getStatusColor = (status: Appointment['status']) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'confirmed': return 'bg-green-100 text-green-800 border-green-200'
-      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'cancelled': return 'bg-red-100 text-red-800 border-red-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
+  const getUpcomingAppointments = () => {
+    const today = new Date().toISOString().split('T')[0]
+    return appointments.filter(apt => apt.date > today).slice(0, 5)
   }
 
-  const getStatusText = (status: Appointment['status']) => {
-    switch (status) {
-      case 'pending': return 'Pendente'
-      case 'confirmed': return 'Confirmado'
-      case 'completed': return 'Concluído'
-      case 'cancelled': return 'Cancelado'
-      default: return status
-    }
+  if (!user || user.role !== 'professional') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Restrito</h2>
+          <p className="text-gray-600">Esta página é apenas para profissionais.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-600">Barbearia Silva</p>
-            </div>
-            <button className="p-2 text-gray-600 hover:text-gray-900 transition-colors">
-              <Settings size={24} />
-            </button>
-          </div>
+      <Navigation />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-2">
+            Bem-vindo, {user.name}! Gerencie seus serviços e agendamentos.
+          </p>
         </div>
-      </div>
 
-      <div className="max-w-4xl mx-auto p-4 space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Hoje</p>
-                <p className="text-2xl font-bold text-gray-900">{dayStats.appointments}</p>
-                <p className="text-sm text-gray-500">agendamentos</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-blue-600" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <Calendar className="w-8 h-8 text-blue-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Hoje</p>
+                <p className="text-2xl font-bold text-gray-900">{getTodayAppointments().length}</p>
               </div>
             </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="card"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Hoje</p>
-                <p className="text-2xl font-bold text-green-600">R$ {dayStats.revenue}</p>
-                <p className="text-sm text-gray-500">faturamento</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="card"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Este mês</p>
-                <p className="text-2xl font-bold text-purple-600">R$ {monthlyRevenue}</p>
-                <p className="text-sm text-gray-500">total</p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Controle de Lembretes Automáticos */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="card"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Bell className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Lembretes Automáticos</h3>
-            </div>
-            <button
-              onClick={loadCronStatus}
-              disabled={cronLoading}
-              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
-            >
-              {cronLoading ? 'Carregando...' : 'Atualizar'}
-            </button>
           </div>
           
-          {cronJobs.length > 0 ? (
-            <div className="space-y-3">
-              {cronJobs.map((job) => (
-                <div key={job.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-3 h-3 rounded-full ${
-                      job.enabled ? 'bg-green-500' : 'bg-gray-400'
-                    }`} />
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {job.name === 'reminder-check' ? 'Verificação de Lembretes' : job.name}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {job.schedule} • {job.enabled ? 'Ativo' : 'Inativo'}
-                      </p>
-                      {job.lastRun && (
-                        <p className="text-xs text-gray-500">
-                          Última execução: {format(new Date(job.lastRun), 'dd/MM HH:mm', { locale: ptBR })}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    {job.enabled ? (
-                      <button
-                        onClick={() => controlCronJob('disable', job.name)}
-                        disabled={cronLoading}
-                        className="flex items-center space-x-1 px-3 py-1 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 disabled:opacity-50"
-                      >
-                        <Square size={14} />
-                        <span>Parar</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => controlCronJob('enable', job.name)}
-                        disabled={cronLoading}
-                        className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 disabled:opacity-50"
-                      >
-                        <Play size={14} />
-                        <span>Iniciar</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              
-              <div className="pt-3 border-t border-gray-200">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center space-x-2 text-gray-600">
-                    <AlertCircle size={16} />
-                    <span>Os lembretes são enviados automaticamente 1 hora antes do agendamento</span>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => controlCronJob('start-all')}
-                      disabled={cronLoading}
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50"
-                    >
-                      Iniciar Todos
-                    </button>
-                    <button
-                      onClick={() => controlCronJob('stop-all')}
-                      disabled={cronLoading}
-                      className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
-                    >
-                      Parar Todos
-                    </button>
-                  </div>
-                </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <Clock className="w-8 h-8 text-green-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Próximos</p>
+                <p className="text-2xl font-bold text-gray-900">{getUpcomingAppointments().length}</p>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-6 text-gray-500">
-              <BellOff size={48} className="mx-auto mb-2 opacity-50" />
-              <p>Nenhum cron job configurado</p>
-              <button
-                onClick={loadCronStatus}
-                className="mt-2 text-blue-600 hover:text-blue-800"
-              >
-                Tentar novamente
-              </button>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <DollarSign className="w-8 h-8 text-yellow-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Serviços</p>
+                <p className="text-2xl font-bold text-gray-900">{services.length}</p>
+              </div>
             </div>
-          )}
-        </motion.div>
-
-        {/* Date Selector */}
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Selecionar Data</h3>
-          <div className="grid grid-cols-7 gap-2">
-            {availableDays.map((date, index) => {
-              const isToday = isSameDay(date, new Date())
-              const isSelected = isSameDay(date, selectedDate)
-              const dayAppointments = appointments.filter(apt => isSameDay(apt.date, date)).length
-              
-              return (
-                <motion.button
-                  key={index}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedDate(date)}
-                  className={`p-3 rounded-lg text-center transition-all ${
-                    isSelected 
-                      ? 'bg-primary-500 text-white shadow-md' 
-                      : 'bg-white border border-gray-200 hover:border-primary-300'
-                  }`}
-                >
-                  <div className="text-xs font-medium">
-                    {isToday ? 'HOJE' : format(date, 'EEE', { locale: ptBR }).toUpperCase()}
-                  </div>
-                  <div className="text-lg font-bold">
-                    {format(date, 'd')}
-                  </div>
-                  {dayAppointments > 0 && (
-                    <div className={`text-xs ${
-                      isSelected ? 'text-primary-100' : 'text-primary-600'
-                    }`}>
-                      {dayAppointments} agend.
-                    </div>
-                  )}
-                </motion.button>
-              )
-            })}
           </div>
         </div>
 
-        {/* Appointments */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {format(selectedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-            </h3>
-            <button
-              onClick={() => setShowAddSlot(true)}
-              className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 transition-colors"
-            >
-              <Plus size={16} />
-              <span>Bloquear horário</span>
-            </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Services Management */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Meus Serviços</h2>
+                <button
+                  onClick={() => {
+                    setEditingService(null)
+                    setServiceForm({ name: '', price: '', duration: '' })
+                    setShowServiceForm(true)
+                  }}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Novo Serviço
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {services.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Nenhum serviço cadastrado</p>
+              ) : (
+                <div className="space-y-4">
+                  {services.map(service => (
+                    <div key={service.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{service.name}</h3>
+                        <p className="text-sm text-gray-600">
+                          R$ {service.price.toFixed(2)} • {service.duration} min
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditService(service)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteService(service.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {todayAppointments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>Nenhum agendamento para este dia</p>
+          {/* Recent Appointments */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Agendamentos de Hoje</h2>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {todayAppointments
-                .sort((a, b) => a.time.localeCompare(b.time))
-                .map((appointment) => (
-                <motion.div
-                  key={appointment.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <span className="text-lg">{appointment.serviceIcon}</span>
+            
+            <div className="p-6">
+              {getTodayAppointments().length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Nenhum agendamento para hoje</p>
+              ) : (
+                <div className="space-y-4">
+                  {getTodayAppointments().map(appointment => (
+                    <div key={appointment.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{appointment.clientName}</h3>
+                          <p className="text-sm text-gray-600">{appointment.clientPhone}</p>
+                          <p className="text-sm text-gray-600">{appointment.time}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          appointment.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                          appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {appointment.status === 'confirmed' ? 'Confirmado' :
+                           appointment.status === 'cancelled' ? 'Cancelado' : 'Concluído'}
+                        </span>
                       </div>
-                      <div>
-                        <h4 className="font-medium text-gray-900">{appointment.clientName}</h4>
-                        <p className="text-sm text-gray-600">{appointment.service}</p>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-600">
+                          Serviços: {appointment.services.map(s => s.name).join(', ')}
+                        </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-lg font-semibold text-gray-900">{appointment.time}</div>
-                      <div className="text-sm text-green-600 font-medium">R$ {appointment.price}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                        getStatusColor(appointment.status)
-                      }`}>
-                        {getStatusText(appointment.status)}
-                      </span>
-                      <span className="text-sm text-gray-500">{appointment.clientPhone}</span>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      {appointment.status === 'pending' && (
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'confirmed')}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Confirmar"
-                        >
-                          <Check size={16} />
-                        </button>
-                      )}
-                      
-                      {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'cancelled')}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Cancelar"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                      
-                      <button
-                        onClick={() => handleWhatsApp(
-                          appointment.clientPhone,
-                          appointment.clientName,
-                          appointment.service,
-                          appointment.time
-                        )}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Enviar WhatsApp"
-                      >
-                        <MessageCircle size={16} />
-                      </button>
-                      
-                      {appointment.status === 'confirmed' && (
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'completed')}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Concluir
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Add Time Slot Modal */}
-      {showAddSlot && (
+      {/* Service Form Modal */}
+      {showServiceForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-lg p-6 w-full max-w-md"
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Bloquear Horário</h3>
-            <div className="space-y-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {editingService ? 'Editar Serviço' : 'Novo Serviço'}
+            </h3>
+            
+            <form onSubmit={handleServiceSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Horário
+                  Nome do Serviço
                 </label>
                 <input
-                  type="time"
-                  value={newSlotTime}
-                  onChange={(e) => setNewSlotTime(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  type="text"
+                  value={serviceForm.name}
+                  onChange={(e) => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Ex: Corte Masculino"
+                  required
                 />
               </div>
-              <div className="flex space-x-3">
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Preço (R$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={serviceForm.price}
+                  onChange={(e) => setServiceForm(prev => ({ ...prev, price: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="25.00"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Duração (minutos)
+                </label>
+                <select
+                  value={serviceForm.duration}
+                  onChange={(e) => setServiceForm(prev => ({ ...prev, duration: e.target.value }))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                >
+                  <option value="">Selecione a duração</option>
+                  <option value="15">15 minutos</option>
+                  <option value="30">30 minutos</option>
+                  <option value="45">45 minutos</option>
+                  <option value="60">60 minutos</option>
+                  <option value="90">90 minutos</option>
+                </select>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => setShowAddSlot(false)}
-                  className="flex-1 btn-secondary"
+                  type="button"
+                  onClick={() => {
+                    setShowServiceForm(false)
+                    setEditingService(null)
+                    setServiceForm({ name: '', price: '', duration: '' })
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={addTimeSlot}
-                  className="flex-1 btn-primary"
+                  type="submit"
+                  disabled={isLoading}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
-                  Bloquear
+                  {editingService ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
-            </div>
-          </motion.div>
+            </form>
+          </div>
         </div>
       )}
     </div>

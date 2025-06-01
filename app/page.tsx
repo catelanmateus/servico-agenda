@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calendar, Clock, User, Phone, Scissors, Check } from 'lucide-react'
+import { Calendar, Clock, User, Phone, MessageCircle, CheckCircle, AlertCircle, Scissors, MapPin, Star, Check } from 'lucide-react'
+import { useAuth } from '../components/AuthProvider'
+import Navigation from '../components/Navigation'
 import { format, addDays, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useAppointments } from '../hooks/useAppointments'
@@ -50,6 +52,7 @@ const getNextDays = (count: number = 7): Date[] => {
 }
 
 export default function HomePage() {
+  const { user } = useAuth()
   const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [booking, setBooking] = useState<BookingData>({ services: [] })
@@ -59,6 +62,13 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [tempReservationToken, setTempReservationToken] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState('')
+  
+  // Redirecionar para login se não estiver autenticado
+  useEffect(() => {
+    if (!user) {
+      window.location.href = '/login'
+    }
+  }, [user])
   
   // Debug log
   console.log('Current booking state:', booking)
@@ -168,30 +178,22 @@ export default function HomePage() {
   }, [])
 
   const handleServiceSelect = (service: Service) => {
-    console.log('Service selected:', service)
     setBooking(prev => {
       const currentServices = prev.services || []
       const isSelected = currentServices.some(s => s.id === service.id)
       
-      console.log('Current services:', currentServices)
-      console.log('Is selected:', isSelected)
-      
+      let newServices
       if (isSelected) {
-        // Remove serviço se já estiver selecionado
-        const newServices = currentServices.filter(s => s.id !== service.id)
-        console.log('Removing service, new services:', newServices)
-        return {
-          ...prev,
-          services: newServices
-        }
+        // Remove o serviço se já estiver selecionado
+        newServices = currentServices.filter(s => s.id !== service.id)
       } else {
-        // Adiciona serviço se não estiver selecionado
-        const newServices = [...currentServices, service]
-        console.log('Adding service, new services:', newServices)
-        return {
-          ...prev,
-          services: newServices
-        }
+        // Adiciona o serviço se não estiver selecionado
+        newServices = [...currentServices, service]
+      }
+      
+      return {
+        ...prev,
+        services: newServices
       }
     })
   }
@@ -367,6 +369,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white">
+      <Navigation />
+      
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-md mx-auto px-4 py-6">
